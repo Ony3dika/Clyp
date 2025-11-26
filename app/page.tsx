@@ -66,7 +66,9 @@ export default function Home() {
       micSource.connect(destination);
     }
 
-    destination.stream.getAudioTracks().forEach((t) => combinedStream.addTrack(t));
+    destination.stream
+      .getAudioTracks()
+      .forEach((t) => combinedStream.addTrack(t));
 
     setStream(combinedStream);
 
@@ -120,10 +122,10 @@ export default function Home() {
   };
 
   return (
-    <main className='relative p-0 m-0 flex flex-col'>
+    <main className='relative p-0 m-0 flex flex-col bg-quad'>
       <Navbar />
 
-      <div className='flex md:flex-row flex-col h-[90vh] w-full'>
+      <div className='flex xl:flex-row flex-col h-[90vh] w-full'>
         {/* Main Content */}
         <div className='flex-1 flex items-center justify-center'>
           <Empty className='xl:w-2/3 border border-solid'>
@@ -157,7 +159,7 @@ export default function Home() {
         </div>
 
         {/* Side Pane */}
-        <div className='md:w-96 w-fullborder-l border-gray-200 bg-gray-50 p-4'>
+        <div className='md:w-96 w-full border border-gray-200/20 backdrop-blur-[2px] bg-gray-50 p-4'>
           <h3 className='text-lg font-semibold mb-4'>Recording Preview</h3>
 
           {recording && stream ? (

@@ -9,7 +9,7 @@
   --card-foreground: oklch(0.2041 0.0442 265.2044);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2041 0.0442 265.2044);
-  --primary: oklch(0.6984 0.1826 45.5262);
+  --primary: oklch(74.049% 0.1714 48.061);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.5517 0.0531 195.7214);
   --secondary-foreground: oklch(1 0 0);
@@ -190,4 +190,9 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+
+.bg-quad {
+  background-image: url('/quad.svg');
 }
