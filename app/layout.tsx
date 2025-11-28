@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Comfortaa } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
 
 const comfortaa = Comfortaa({
   weight: ["400", "500", "600", "700"],
@@ -20,7 +21,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en'>
-      <body className={`${comfortaa.className} antialiased`}>{children}</body>
+      <body className={`${comfortaa.className} antialiased`}>
+        {children}
+        <Toaster position="top-right" />
+      </body>
     </html>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Camera, Video, VideoOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,9 +15,11 @@ import Navbar from "@/components/navbar";
 export default function Home() {
   const [recording, setRecording] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const webcamRef = useRef<HTMLVideoElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
@@ -25,65 +28,82 @@ export default function Home() {
     }
   }, [stream, recording]);
 
+  useEffect(() => {
+    if (webcamRef.current && webcamStream) {
+      webcamRef.current.srcObject = webcamStream;
+    }
+  }, [webcamStream, recording]);
+
   // Start
   const startRecording = async () => {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        displaySurface: "monitor",
-        frameRate: 120, // increase FPS
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        return toast.error("Screen recording is not supported on this device");
+      }
+
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: "monitor",
+          frameRate: 120, // increase FPS
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: true, // tab audio only
+      });
+
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      setWebcamStream(micStream);
+
+      const videoTrack = screenStream.getVideoTracks()[0];
+      await videoTrack.applyConstraints({
         width: { ideal: 1920 },
         height: { ideal: 1080 },
-      },
-      audio: true, // tab audio only
-    });
+        frameRate: 60,
+      });
 
-    const micStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-    });
+      const combinedStream = new MediaStream();
+      combinedStream.addTrack(videoTrack);
 
-    const videoTrack = screenStream.getVideoTracks()[0];
-    await videoTrack.applyConstraints({
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      frameRate: 60,
-    });
+      // Audio Mixing
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const destination = audioContext.createMediaStreamDestination();
 
-    const combinedStream = new MediaStream();
-    combinedStream.addTrack(videoTrack);
+      if (screenStream.getAudioTracks().length > 0) {
+        const screenSource = audioContext.createMediaStreamSource(screenStream);
+        screenSource.connect(destination);
+      }
 
-    // Audio Mixing
-    const audioContext = new AudioContext();
-    audioContextRef.current = audioContext;
-    const destination = audioContext.createMediaStreamDestination();
+      if (micStream.getAudioTracks().length > 0) {
+        const micSource = audioContext.createMediaStreamSource(micStream);
+        micSource.connect(destination);
+      }
 
-    if (screenStream.getAudioTracks().length > 0) {
-      const screenSource = audioContext.createMediaStreamSource(screenStream);
-      screenSource.connect(destination);
+      destination.stream
+        .getAudioTracks()
+        .forEach((t) => combinedStream.addTrack(t));
+
+      setStream(combinedStream);
+
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType: "video/mp4; codecs=vp9",
+        videoBitsPerSecond: 15_000_000, // 15 Mbps
+        audioBitsPerSecond: 256_000, // better audio quality
+      });
+
+      recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
+      recorder.onstop = saveRecording;
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      toast.error("Failed to start recording. Please try again.");
     }
-
-    if (micStream.getAudioTracks().length > 0) {
-      const micSource = audioContext.createMediaStreamSource(micStream);
-      micSource.connect(destination);
-    }
-
-    destination.stream
-      .getAudioTracks()
-      .forEach((t) => combinedStream.addTrack(t));
-
-    setStream(combinedStream);
-
-    const recorder = new MediaRecorder(combinedStream, {
-      mimeType: "video/mp4; codecs=vp9",
-      videoBitsPerSecond: 15_000_000, // 15 Mbps
-      audioBitsPerSecond: 256_000, // better audio quality
-    });
-
-    recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
-    recorder.onstop = saveRecording;
-
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-    setRecording(true);
   };
 
   // Stop
@@ -124,9 +144,9 @@ export default function Home() {
   return (
     <main className='relative p-0 m-0 flex flex-col bg-quad'>
       <Navbar />
-
       <div className='flex xl:flex-row flex-col h-[90vh] w-full'>
         {/* Main Content */}
+
         <div className='flex-1 flex items-center justify-center'>
           <Empty className='xl:w-2/3 border border-solid'>
             <EmptyHeader>
@@ -186,6 +206,25 @@ export default function Home() {
                 <Camera className='mx-auto mb-2' size={32} />
                 <p>No active recording</p>
                 <p className='text-sm'>Start recording to see preview</p>
+              </div>
+            </div>
+          )}
+
+          <h3 className='text-lg font-semibold mb-4 mt-8'>Webcam Preview</h3>
+          {recording && webcamStream ? (
+            <div className='rounded-lg border border-border overflow-hidden'>
+              <video
+                ref={webcamRef}
+                autoPlay
+                muted
+                className='w-full h-48 object-cover'
+              />
+            </div>
+          ) : (
+            <div className='flex items-center justify-center h-48 bg-gray-200 rounded-lg'>
+              <div className='text-center text-gray-500'>
+                <Camera className='mx-auto mb-2' size={32} />
+                <p>No active webcam</p>
               </div>
             </div>
           )}
