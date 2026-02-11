@@ -11,28 +11,29 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Navbar from "@/components/navbar";
 export default function Home() {
   const [recording, setRecording] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [quality, setQuality] = useState("1080p");
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const webcamRef = useRef<HTMLVideoElement | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
   }, [stream, recording]);
-
-  useEffect(() => {
-    if (webcamRef.current && webcamStream) {
-      webcamRef.current.srcObject = webcamStream;
-    }
-  }, [webcamStream, recording]);
 
   // Start
   const startRecording = async () => {
@@ -51,47 +52,31 @@ export default function Home() {
         audio: true, // tab audio only
       });
 
-      const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      });
-      setWebcamStream(micStream);
+      const getConstraints = (quality: string) => {
+        switch (quality) {
+          case "720p":
+            return { width: 1280, height: 720, bitrate: 5_000_000 };
+          case "480p":
+            return { width: 854, height: 480, bitrate: 2_000_000 };
+          case "1080p":
+          default:
+            return { width: 1920, height: 1080, bitrate: 15_000_000 };
+        }
+      };
+
+      const constraints = getConstraints(quality);
 
       const videoTrack = screenStream.getVideoTracks()[0];
       await videoTrack.applyConstraints({
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        width: { ideal: constraints.width },
+        height: { ideal: constraints.height },
         frameRate: 60,
       });
 
-      const combinedStream = new MediaStream();
-      combinedStream.addTrack(videoTrack);
-
-      // Audio Mixing
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      const destination = audioContext.createMediaStreamDestination();
-
-      if (screenStream.getAudioTracks().length > 0) {
-        const screenSource = audioContext.createMediaStreamSource(screenStream);
-        screenSource.connect(destination);
-      }
-
-      if (micStream.getAudioTracks().length > 0) {
-        const micSource = audioContext.createMediaStreamSource(micStream);
-        micSource.connect(destination);
-      }
-
-      destination.stream
-        .getAudioTracks()
-        .forEach((t) => combinedStream.addTrack(t));
-
-      setStream(combinedStream);
-
-      const recorder = new MediaRecorder(combinedStream, {
+      const recorder = new MediaRecorder(screenStream, {
         mimeType: "video/mp4; codecs=vp9",
-        videoBitsPerSecond: 15_000_000, // 15 Mbps
-        audioBitsPerSecond: 256_000, // better audio quality
+        videoBitsPerSecond: constraints.bitrate,
+        audioBitsPerSecond: 256_000,
       });
 
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
@@ -120,11 +105,6 @@ export default function Home() {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       setStream(null);
-    }
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
     }
   };
 
@@ -159,7 +139,7 @@ export default function Home() {
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <div className='flex gap-2'>
+              <div className='flex flex-col gap-4'>
                 {recording ? (
                   <Button onClick={stopRecording}>
                     <VideoOff />
@@ -173,6 +153,26 @@ export default function Home() {
                 )}
 
                 {/* <Button variant='outline'>View Recordings</Button> */}
+
+                <div className='flex gap-2 border w-fit items-center justify-between px-3 py-2 rounded-md '>
+                  <span className='text-sm text-gray-500'>Quality:</span>
+                  <Select
+                    value={quality}
+                    onValueChange={setQuality}
+                    disabled={recording}
+                  >
+                    <SelectTrigger className='w-[140px] border-none outline-none focus:outline-none'>
+                      <SelectValue placeholder='Select Quality' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value='1080p'>1080p (HD)</SelectItem>
+                        <SelectItem value='720p'>720p</SelectItem>
+                        <SelectItem value='480p'>480p</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </EmptyContent>
           </Empty>
@@ -206,25 +206,6 @@ export default function Home() {
                 <Camera className='mx-auto mb-2' size={32} />
                 <p>No active recording</p>
                 <p className='text-sm'>Start recording to see preview</p>
-              </div>
-            </div>
-          )}
-
-          <h3 className='text-lg font-semibold mb-4 mt-8'>Webcam Preview</h3>
-          {recording && webcamStream ? (
-            <div className='rounded-lg border border-border overflow-hidden'>
-              <video
-                ref={webcamRef}
-                autoPlay
-                muted
-                className='w-full h-48 object-cover'
-              />
-            </div>
-          ) : (
-            <div className='flex items-center justify-center h-48 bg-gray-200 rounded-lg'>
-              <div className='text-center text-gray-500'>
-                <Camera className='mx-auto mb-2' size={32} />
-                <p>No active webcam</p>
               </div>
             </div>
           )}
