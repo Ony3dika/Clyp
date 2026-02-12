@@ -24,6 +24,8 @@ export default function Home() {
   const [recording, setRecording] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [quality, setQuality] = useState("1080p");
+  const [duration, setDuration] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -34,6 +36,22 @@ export default function Home() {
       videoRef.current.srcObject = stream;
     }
   }, [stream, recording]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
 
   // Start
   const startRecording = async () => {
@@ -51,6 +69,7 @@ export default function Home() {
         },
         audio: true, // tab audio only
       });
+      setStream(screenStream);
 
       const getConstraints = (quality: string) => {
         switch (quality) {
@@ -85,6 +104,12 @@ export default function Home() {
       recorder.start();
       mediaRecorderRef.current = recorder;
       setRecording(true);
+
+      // Start timer
+      setDuration(0);
+      timerRef.current = setInterval(() => {
+        setDuration((prev) => prev + 1);
+      }, 1000);
     } catch (error) {
       console.error("Error starting recording:", error);
       toast.error("Failed to start recording. Please try again.");
@@ -96,6 +121,11 @@ export default function Home() {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
 
     // Clear video element
@@ -124,11 +154,34 @@ export default function Home() {
   return (
     <main className='relative p-0 m-0 flex flex-col bg-quad'>
       <Navbar />
-      <div className='flex xl:flex-row flex-col h-[90vh] w-full'>
-        {/* Main Content */}
-
-        <div className='flex-1 flex items-center justify-center'>
-          <Empty className='xl:w-2/3 border border-solid'>
+      <div className='flex h-[90vh] w-full items-center justify-center'>
+        {recording ? (
+          <div className='flex flex-col items-center gap-6 xl:w-1/2 md:w-2/3 w-full px-4'>
+            <div className='rounded-xl border border-border overflow-hidden w-full aspect-video bg-gray-900 shadow-lg relative'>
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                className='w-full h-full object-contain'
+              />
+            </div>
+            <div className='flex items-center gap-2 mb-4'>
+              <div className='text-2xl font-mono font-bold text-gray-800 dark:text-gray-200'>
+                {formatDuration(duration)}
+              </div>
+              <div className='w-3 h-3 bg-red-500 rounded-full animate-pulse' />
+            </div>
+            <Button
+              onClick={stopRecording}
+              size='lg'
+              className='bg-red-500 hover:bg-red-600 text-white'
+            >
+              <VideoOff className='mr-2 h-5 w-5' />
+              Stop Recording
+            </Button>
+          </div>
+        ) : (
+          <Empty className='xl:w-1/2 md:w-2/3 w-full border border-solid ml-auto mr-auto'>
             <EmptyHeader>
               <EmptyMedia variant='icon'>
                 <Camera />
@@ -139,29 +192,22 @@ export default function Home() {
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <div className='flex flex-col gap-4'>
-                {recording ? (
-                  <Button onClick={stopRecording}>
-                    <VideoOff />
-                    Stop Recording
-                  </Button>
-                ) : (
-                  <Button onClick={startRecording}>
-                    <Video />
-                    Start Recording
-                  </Button>
-                )}
+              <div className='flex flex-col gap-4 items-center'>
+                <Button onClick={startRecording}>
+                  <Video className='mr-2 h-4 w-4' />
+                  Start Recording
+                </Button>
 
                 {/* <Button variant='outline'>View Recordings</Button> */}
 
-                <div className='flex gap-2 border w-fit items-center justify-between px-3 py-2 rounded-md '>
+                <div className='flex gap-2 border w-fit items-center justify-between px-2 rounded-md '>
                   <span className='text-sm text-gray-500'>Quality:</span>
                   <Select
                     value={quality}
                     onValueChange={setQuality}
                     disabled={recording}
                   >
-                    <SelectTrigger className='w-[140px] border-none outline-none focus:outline-none'>
+                    <SelectTrigger className='w-[100px] p-0  border-none outline-none focus:outline-none'>
                       <SelectValue placeholder='Select Quality' />
                     </SelectTrigger>
                     <SelectContent>
@@ -176,40 +222,7 @@ export default function Home() {
               </div>
             </EmptyContent>
           </Empty>
-        </div>
-
-        {/* Side Pane */}
-        <div className='md:w-96 w-full border border-gray-200/20 backdrop-blur-[2px] bg-gray-50 p-4'>
-          <h3 className='text-lg font-semibold mb-4'>Recording Preview</h3>
-
-          {recording && stream ? (
-            <div className='space-y-4'>
-              <div className='rounded-lg border border-border overflow-hidden'>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  className='w-full h-48 object-cover'
-                />
-              </div>
-              <div className='text-sm text-gray-600'>
-                <div className='flex items-center gap-2 mb-2'>
-                  <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
-                  <span>Recording in progress...</span>
-                </div>
-                <p>Screen and microphone audio are being captured.</p>
-              </div>
-            </div>
-          ) : (
-            <div className='flex items-center justify-center h-48 bg-gray-200 rounded-lg'>
-              <div className='text-center text-gray-500'>
-                <Camera className='mx-auto mb-2' size={32} />
-                <p>No active recording</p>
-                <p className='text-sm'>Start recording to see preview</p>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </main>
   );
